@@ -74,9 +74,12 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     glm::glm
 )
 
-# Platform-specific libraries for dynamic loading
+# Platform-specific settings for Linux
 if(UNIX AND NOT APPLE)
     target_link_libraries(${PROJECT_NAME} PRIVATE dl)
+
+    # Static link C++ runtime to avoid glibc version issues
+    target_link_options(${PROJECT_NAME} PRIVATE -static-libgcc -static-libstdc++)
 endif()
 
 # Shader handling
