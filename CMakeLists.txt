@@ -15,18 +15,8 @@ elseif(UNIX AND NOT APPLE)
     add_definitions(-DVK_USE_PLATFORM_XCB_KHR)
 endif()
 
-# Vulkan headers (no linking required - we use runtime loading via volk)
-find_path(VULKAN_HEADERS_DIR vulkan/vulkan.h
-    HINTS
-        $ENV{VULKAN_SDK}/Include
-        /usr/include
-        /usr/local/include
-)
-if(VULKAN_HEADERS_DIR)
-    message(STATUS "Vulkan headers found: ${VULKAN_HEADERS_DIR}")
-else()
-    message(STATUS "Vulkan headers not found in standard locations, will use system default")
-endif()
+set(VULKAN_HEADERS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/vulkan-headers/include)
+message(STATUS "Using local Vulkan headers: ${VULKAN_HEADERS_DIR}")
 
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -75,10 +65,8 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/volk
+    ${VULKAN_HEADERS_DIR}
 )
-if(VULKAN_HEADERS_DIR)
-    target_include_directories(${PROJECT_NAME} PRIVATE ${VULKAN_HEADERS_DIR})
-endif()
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
@@ -91,11 +79,15 @@ if(UNIX AND NOT APPLE)
     target_link_libraries(${PROJECT_NAME} PRIVATE dl)
 endif()
 
-# Shader compilation
+# Shader handling
+set(SHADER_OUTPUT_DIR ${CMAKE_BINARY_DIR}/shaders)
+file(MAKE_DIRECTORY ${SHADER_OUTPUT_DIR})
+
+# Pre-compiled shaders directory (committed to repository)
+set(PRECOMPILED_SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shaders)
+
 find_program(GLSLC glslc HINTS $ENV{VULKAN_SDK}/Bin $ENV{VULKAN_SDK}/bin /usr/bin)
-if(NOT GLSLC)
-    message(WARNING "glslc not found. Shaders must be compiled manually.")
-else()
+if(GLSLC)
     message(STATUS "glslc found: ${GLSLC}")
 
     # Shader files
@@ -112,10 +104,6 @@ else()
         shaders/final_apply.frag
     )
 
-    # Output directory for compiled shaders
-    set(SHADER_OUTPUT_DIR ${CMAKE_BINARY_DIR}/shaders)
-    file(MAKE_DIRECTORY ${SHADER_OUTPUT_DIR})
-
     # Compile each shader
     foreach(SHADER ${SHADER_SOURCES})
         get_filename_component(SHADER_NAME ${SHADER} NAME)
@@ -131,15 +119,34 @@ else()
 
     add_custom_target(shaders DEPENDS ${SHADER_SPVS})
     add_dependencies(${PROJECT_NAME} shaders)
-endif()
 
-# Copy shaders to build directory (for runtime)
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${SHADER_OUTPUT_DIR}
-    $<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders
-    COMMENT "Copying compiled shaders to output directory"
-)
+    # Copy compiled shaders to output directory
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${SHADER_OUTPUT_DIR}
+        $<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders
+        COMMENT "Copying compiled shaders to output directory"
+    )
+else()
+    message(STATUS "glslc not found - using pre-compiled shaders from repository")
+
+    # Copy pre-compiled shaders to output directory
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${PRECOMPILED_SHADER_DIR}/gbuffer.vert.spv
+        ${PRECOMPILED_SHADER_DIR}/gbuffer.frag.spv
+        ${PRECOMPILED_SHADER_DIR}/motion_apply.vert.spv
+        ${PRECOMPILED_SHADER_DIR}/motion_apply.frag.spv
+        ${PRECOMPILED_SHADER_DIR}/blur_vertical.vert.spv
+        ${PRECOMPILED_SHADER_DIR}/blur_vertical.frag.spv
+        ${PRECOMPILED_SHADER_DIR}/blur_horizontal.vert.spv
+        ${PRECOMPILED_SHADER_DIR}/blur_horizontal.frag.spv
+        ${PRECOMPILED_SHADER_DIR}/final_apply.vert.spv
+        ${PRECOMPILED_SHADER_DIR}/final_apply.frag.spv
+        $<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders/
+        COMMENT "Copying pre-compiled shaders to output directory"
+    )
+endif()
 
 # Set output directories
 set_target_properties(${PROJECT_NAME} PROPERTIES

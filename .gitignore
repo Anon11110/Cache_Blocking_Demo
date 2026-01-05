@@ -5,8 +5,8 @@ cmake-build-*/
 bin/
 lib/
 
-# Compiled shaders
-*.spv
+# Compiled shaders (except pre-compiled ones in shaders/)
+build/**/*.spv
 
 # CMake generated files
 CMakeCache.txt
