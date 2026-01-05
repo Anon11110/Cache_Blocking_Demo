@@ -375,7 +375,6 @@ struct _GLFWwindow
     GLFWbool            focusOnShow;
     GLFWbool            shouldClose;
     void*               userPointer;
-    GLFWbool            doublebuffer;
     GLFWvidmode         videoMode;
     _GLFWmonitor*       monitor;
     _GLFWcursor*        cursor;
@@ -424,7 +423,7 @@ struct _GLFWwindow
 //
 struct _GLFWmonitor
 {
-    char            name[128];
+    char*           name;
     void*           userPointer;
 
     // Physical dimensions in millimeters.
@@ -478,15 +477,14 @@ struct _GLFWmapping
 //
 struct _GLFWjoystick
 {
-    GLFWbool        allocated;
-    GLFWbool        connected;
+    GLFWbool        present;
     float*          axes;
     int             axisCount;
     unsigned char*  buttons;
     int             buttonCount;
     unsigned char*  hats;
     int             hatCount;
-    char            name[128];
+    char*           name;
     void*           userPointer;
     char            guid[33];
     _GLFWmapping*   mapping;
@@ -719,7 +717,7 @@ void _glfwInputWindowMonitor(_GLFWwindow* window, _GLFWmonitor* monitor);
 void _glfwInputKey(_GLFWwindow* window,
                    int key, int scancode, int action, int mods);
 void _glfwInputChar(_GLFWwindow* window,
-                    uint32_t codepoint, int mods, GLFWbool plain);
+                    unsigned int codepoint, int mods, GLFWbool plain);
 void _glfwInputScroll(_GLFWwindow* window, double xoffset, double yoffset);
 void _glfwInputMouseClick(_GLFWwindow* window, int button, int action, int mods);
 void _glfwInputCursorPos(_GLFWwindow* window, double xpos, double ypos);
@@ -762,7 +760,6 @@ void _glfwAllocGammaArrays(GLFWgammaramp* ramp, unsigned int size);
 void _glfwFreeGammaArrays(GLFWgammaramp* ramp);
 void _glfwSplitBPP(int bpp, int* red, int* green, int* blue);
 
-void _glfwInitGamepadMappings(void);
 _GLFWjoystick* _glfwAllocJoystick(const char* name,
                                   const char* guid,
                                   int axisCount,
@@ -775,12 +772,7 @@ GLFWbool _glfwInitVulkan(int mode);
 void _glfwTerminateVulkan(void);
 const char* _glfwGetVulkanResultString(VkResult result);
 
-size_t _glfwEncodeUTF8(char* s, uint32_t codepoint);
-char** _glfwParseUriList(char* text, int* count);
-
 char* _glfw_strdup(const char* source);
-int _glfw_min(int a, int b);
-int _glfw_max(int a, int b);
 float _glfw_fminf(float a, float b);
 float _glfw_fmaxf(float a, float b);
 

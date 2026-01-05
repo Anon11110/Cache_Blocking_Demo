@@ -115,6 +115,7 @@ typedef struct _GLFWcontextWGL
     HDC       dc;
     HGLRC     handle;
     int       interval;
+
 } _GLFWcontextWGL;
 
 // WGL-specific global data
@@ -147,6 +148,7 @@ typedef struct _GLFWlibraryWGL
     GLFWbool                            ARB_create_context_robustness;
     GLFWbool                            ARB_create_context_no_error;
     GLFWbool                            ARB_context_flush_control;
+
 } _GLFWlibraryWGL;
 
 

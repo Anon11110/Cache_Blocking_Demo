@@ -318,19 +318,8 @@ void _glfwGetMonitorContentScaleWin32(HMONITOR handle, float* xscale, float* ysc
 {
     UINT xdpi, ydpi;
 
-    if (xscale)
-        *xscale = 0.f;
-    if (yscale)
-        *yscale = 0.f;
-
     if (IsWindows8Point1OrGreater())
-    {
-        if (GetDpiForMonitor(handle, MDT_EFFECTIVE_DPI, &xdpi, &ydpi) != S_OK)
-        {
-            _glfwInputError(GLFW_PLATFORM_ERROR, "Win32: Failed to query monitor DPI");
-            return;
-        }
-    }
+        GetDpiForMonitor(handle, MDT_EFFECTIVE_DPI, &xdpi, &ydpi);
     else
     {
         const HDC dc = GetDC(NULL);
@@ -382,7 +371,7 @@ void _glfwPlatformGetMonitorWorkarea(_GLFWmonitor* monitor,
                                      int* width, int* height)
 {
     MONITORINFO mi = { sizeof(mi) };
-    GetMonitorInfoW(monitor->win32.handle, &mi);
+    GetMonitorInfo(monitor->win32.handle, &mi);
 
     if (xpos)
         *xpos = mi.rcWork.left;

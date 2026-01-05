@@ -66,6 +66,7 @@ typedef struct _GLFWcontextOSMesa
     int                 width;
     int                 height;
     void*               buffer;
+
 } _GLFWcontextOSMesa;
 
 // OSMesa-specific global data
@@ -81,6 +82,7 @@ typedef struct _GLFWlibraryOSMesa
     PFN_OSMesaGetColorBuffer        GetColorBuffer;
     PFN_OSMesaGetDepthBuffer        GetDepthBuffer;
     PFN_OSMesaGetProcAddress        GetProcAddress;
+
 } _GLFWlibraryOSMesa;
 
 

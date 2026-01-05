@@ -98,7 +98,8 @@ static void closeJoystick(_GLFWjoystick* js)
 {
     int i;
 
-    _glfwInputJoystick(js, GLFW_DISCONNECTED);
+    if (!js->present)
+        return;
 
     for (i = 0;  i < CFArrayGetCount(js->ns.axes);  i++)
         free((void*) CFArrayGetValueAtIndex(js->ns.axes, i));
@@ -113,6 +114,7 @@ static void closeJoystick(_GLFWjoystick* js)
     CFRelease(js->ns.hats);
 
     _glfwFreeJoystick(js);
+    _glfwInputJoystick(js, GLFW_DISCONNECTED);
 }
 
 // Callback for user-initiated joystick addition
@@ -292,9 +294,9 @@ static void removeCallback(void* context,
 
     for (jid = 0;  jid <= GLFW_JOYSTICK_LAST;  jid++)
     {
-        if (_glfw.joysticks[jid].connected && _glfw.joysticks[jid].ns.device == device)
+        if (_glfw.joysticks[jid].ns.device == device)
         {
-            closeJoystick(&_glfw.joysticks[jid]);
+            closeJoystick(_glfw.joysticks + jid);
             break;
         }
     }
@@ -390,10 +392,7 @@ void _glfwTerminateJoysticksNS(void)
     int jid;
 
     for (jid = 0;  jid <= GLFW_JOYSTICK_LAST;  jid++)
-    {
-        if (_glfw.joysticks[jid].connected)
-            closeJoystick(&_glfw.joysticks[jid]);
-    }
+        closeJoystick(_glfw.joysticks + jid);
 
     CFRelease(_glfw.ns.hidManager);
     _glfw.ns.hidManager = NULL;
@@ -471,7 +470,7 @@ int _glfwPlatformPollJoystick(_GLFWjoystick* js, int mode)
         }
     }
 
-    return js->connected;
+    return js->present;
 }
 
 void _glfwPlatformUpdateGamepadGUID(char* guid)

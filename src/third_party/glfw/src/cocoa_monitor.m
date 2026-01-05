@@ -58,12 +58,12 @@ static char* getMonitorName(CGDirectDisplayID displayID, NSScreen* screen)
     io_service_t service;
     CFDictionaryRef info;
 
-    if (IOServiceGetMatchingServices(MACH_PORT_NULL,
+    if (IOServiceGetMatchingServices(kIOMasterPortDefault,
                                      IOServiceMatching("IODisplayConnect"),
                                      &it) != 0)
     {
         // This may happen if a desktop Mac is running headless
-        return _glfw_strdup("Display");
+        return NULL;
     }
 
     while ((service = IOIteratorNext(it)) != 0)
@@ -98,7 +98,11 @@ static char* getMonitorName(CGDirectDisplayID displayID, NSScreen* screen)
     IOObjectRelease(it);
 
     if (!service)
-        return _glfw_strdup("Display");
+    {
+        _glfwInputError(GLFW_PLATFORM_ERROR,
+                        "Cocoa: Failed to find service port for display");
+        return NULL;
+    }
 
     CFDictionaryRef names =
         CFDictionaryGetValue(info, CFSTR(kDisplayProductName));
@@ -110,7 +114,7 @@ static char* getMonitorName(CGDirectDisplayID displayID, NSScreen* screen)
     {
         // This may happen if a desktop Mac is running headless
         CFRelease(info);
-        return _glfw_strdup("Display");
+        return NULL;
     }
 
     const CFIndex size =
@@ -227,7 +231,7 @@ static double getFallbackRefreshRate(CGDirectDisplayID displayID)
     io_iterator_t it;
     io_service_t service;
 
-    if (IOServiceGetMatchingServices(MACH_PORT_NULL,
+    if (IOServiceGetMatchingServices(kIOMasterPortDefault,
                                      IOServiceMatching("IOFramebuffer"),
                                      &it) != 0)
     {
@@ -352,7 +356,7 @@ void _glfwPollMonitorsNS(void)
         const CGSize size = CGDisplayScreenSize(displays[i]);
         char* name = getMonitorName(displays[i], screen);
         if (!name)
-            continue;
+            name = _glfw_strdup("Unknown");
 
         _GLFWmonitor* monitor = _glfwAllocMonitor(name, size.width, size.height);
         monitor->ns.displayID  = displays[i];

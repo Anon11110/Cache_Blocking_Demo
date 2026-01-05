@@ -65,6 +65,11 @@
         exit(1);                                                               \
     } while (0)
 
+static GLADapiproc glad_vulkan_callback(const char* name, void* user)
+{
+    return glfwGetInstanceProcAddress((VkInstance) user, name);
+}
+
 static const uint32_t fragShaderCode[] = {
     0x07230203,0x00010000,0x00080007,0x00000014,0x00000000,0x00020011,0x00000001,0x0006000b,
     0x00000001,0x4c534c47,0x6474732e,0x3035342e,0x00000000,0x0003000e,0x00000000,0x00000001,
@@ -1246,7 +1251,7 @@ static void demo_prepare_pipeline(struct demo *demo) {
     VkPipelineDepthStencilStateCreateInfo ds;
     VkPipelineViewportStateCreateInfo vp;
     VkPipelineMultisampleStateCreateInfo ms;
-    VkDynamicState dynamicStateEnables[2];
+    VkDynamicState dynamicStateEnables[VK_DYNAMIC_STATE_RANGE_SIZE];
     VkPipelineDynamicStateCreateInfo dynamicState;
 
     VkResult U_ASSERT_ONLY err;
@@ -1560,7 +1565,6 @@ static VkBool32 demo_check_layers(uint32_t check_count, const char **check_names
 
 static void demo_init_vk(struct demo *demo) {
     VkResult err;
-    VkBool32 portability_enumeration = VK_FALSE;
     uint32_t i = 0;
     uint32_t required_extension_count = 0;
     uint32_t instance_extension_count = 0;
@@ -1668,13 +1672,6 @@ static void demo_init_vk(struct demo *demo) {
                 }
             }
             assert(demo->enabled_extension_count < 64);
-            if (!strcmp(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
-                        instance_extensions[i].extensionName)) {
-                demo->extension_names[demo->enabled_extension_count++] =
-                    VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
-                portability_enumeration = VK_TRUE;
-            }
-            assert(demo->enabled_extension_count < 64);
         }
 
         free(instance_extensions);
@@ -1699,9 +1696,6 @@ static void demo_init_vk(struct demo *demo) {
         .ppEnabledExtensionNames = (const char *const *)demo->extension_names,
     };
 
-    if (portability_enumeration)
-        inst_info.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-
     uint32_t gpu_count;
 
     err = vkCreateInstance(&inst_info, NULL, &demo->inst);
@@ -1721,7 +1715,7 @@ static void demo_init_vk(struct demo *demo) {
                  "vkCreateInstance Failure");
     }
 
-    gladLoadVulkanUserPtr(NULL, (GLADuserptrloadfunc) glfwGetInstanceProcAddress, demo->inst);
+    gladLoadVulkanUserPtr(NULL, glad_vulkan_callback, demo->inst);
 
     /* Make initial call to query gpu_count, then second call for gpu info*/
     err = vkEnumeratePhysicalDevices(demo->inst, &gpu_count, NULL);
@@ -1744,7 +1738,7 @@ static void demo_init_vk(struct demo *demo) {
                  "vkEnumeratePhysicalDevices Failure");
     }
 
-    gladLoadVulkanUserPtr(demo->gpu, (GLADuserptrloadfunc) glfwGetInstanceProcAddress, demo->inst);
+    gladLoadVulkanUserPtr(demo->gpu, glad_vulkan_callback, demo->inst);
 
     /* Look for device extensions */
     uint32_t device_extension_count = 0;
@@ -1972,7 +1966,7 @@ static void demo_init_connection(struct demo *demo) {
         exit(1);
     }
 
-    gladLoadVulkanUserPtr(NULL, (GLADuserptrloadfunc) glfwGetInstanceProcAddress, NULL);
+    gladLoadVulkanUserPtr(NULL, glad_vulkan_callback, NULL);
 }
 
 static void demo_init(struct demo *demo, const int argc, const char *argv[])

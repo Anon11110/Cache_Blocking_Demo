@@ -31,9 +31,25 @@
 #include <float.h>
 #include <string.h>
 
-// HACK: This enum value is missing from framework headers on OS X 10.11 despite
-//       having been (according to documentation) added in Mac OS X 10.7
-#define NSWindowCollectionBehaviorFullScreenNone (1 << 9)
+// Returns the style mask corresponding to the window settings
+//
+static NSUInteger getStyleMask(_GLFWwindow* window)
+{
+    NSUInteger styleMask = NSWindowStyleMaskMiniaturizable;
+
+    if (window->monitor || !window->decorated)
+        styleMask |= NSWindowStyleMaskBorderless;
+    else
+    {
+        styleMask |= NSWindowStyleMaskTitled |
+                     NSWindowStyleMaskClosable;
+
+        if (window->resizable)
+            styleMask |= NSWindowStyleMaskResizable;
+    }
+
+    return styleMask;
+}
 
 // Returns whether the cursor is in the content area of the specified window
 //
@@ -98,11 +114,10 @@ static void updateCursorMode(_GLFWwindow* window)
     else if (_glfw.ns.disabledCursorWindow == window)
     {
         _glfw.ns.disabledCursorWindow = NULL;
+        CGAssociateMouseAndMouseCursorPosition(true);
         _glfwPlatformSetCursorPos(window,
                                   _glfw.ns.restoreCursorPosX,
                                   _glfw.ns.restoreCursorPosY);
-        // NOTE: The matching CGAssociateMouseAndMouseCursorPosition call is
-        //       made in _glfwPlatformSetCursorPos as part of a workaround
     }
 
     if (cursorInContentArea(window))
@@ -228,7 +243,7 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
 
 - (void)windowDidResize:(NSNotification *)notification
 {
-    if (window->context.source == GLFW_NATIVE_CONTEXT_API)
+    if (window->context.client != GLFW_NO_API)
         [window->context.nsgl.object update];
 
     if (_glfw.ns.disabledCursorWindow == window)
@@ -263,7 +278,7 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
 
 - (void)windowDidMove:(NSNotification *)notification
 {
-    if (window->context.source == GLFW_NATIVE_CONTEXT_API)
+    if (window->context.client != GLFW_NO_API)
         [window->context.nsgl.object update];
 
     if (_glfw.ns.disabledCursorWindow == window)
@@ -345,7 +360,9 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
         markedText = [[NSMutableAttributedString alloc] init];
 
         [self updateTrackingAreas];
-        [self registerForDraggedTypes:@[NSPasteboardTypeURL]];
+        // NOTE: kUTTypeURL corresponds to NSPasteboardTypeURL but is available
+        //       on 10.7 without having been deprecated yet
+        [self registerForDraggedTypes:@[(__bridge NSString*) kUTTypeURL]];
     }
 
     return self;
@@ -380,7 +397,7 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
 
 - (void)updateLayer
 {
-    if (window->context.source == GLFW_NATIVE_CONTEXT_API)
+    if (window->context.client != GLFW_NO_API)
         [window->context.nsgl.object update];
 
     _glfwInputWindowDamage(window);
@@ -503,18 +520,6 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
 {
     const NSRect contentRect = [window->ns.view frame];
     const NSRect fbRect = [window->ns.view convertRectToBacking:contentRect];
-    const float xscale = fbRect.size.width / contentRect.size.width;
-    const float yscale = fbRect.size.height / contentRect.size.height;
-
-    if (xscale != window->ns.xscale || yscale != window->ns.yscale)
-    {
-        if (window->ns.retina && window->ns.layer)
-            [window->ns.layer setContentsScale:[window->ns.object backingScaleFactor]];
-
-        window->ns.xscale = xscale;
-        window->ns.yscale = yscale;
-        _glfwInputWindowContentScale(window, xscale, yscale);
-    }
 
     if (fbRect.size.width != window->ns.fbWidth ||
         fbRect.size.height != window->ns.fbHeight)
@@ -522,6 +527,19 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
         window->ns.fbWidth  = fbRect.size.width;
         window->ns.fbHeight = fbRect.size.height;
         _glfwInputFramebufferSize(window, fbRect.size.width, fbRect.size.height);
+    }
+
+    const float xscale = fbRect.size.width / contentRect.size.width;
+    const float yscale = fbRect.size.height / contentRect.size.height;
+
+    if (xscale != window->ns.xscale || yscale != window->ns.yscale)
+    {
+        window->ns.xscale = xscale;
+        window->ns.yscale = yscale;
+        _glfwInputWindowContentScale(window, xscale, yscale);
+
+        if (window->ns.retina && window->ns.layer)
+            [window->ns.layer setContentsScale:[window->ns.object backingScaleFactor]];
     }
 }
 
@@ -793,21 +811,9 @@ static GLFWbool createNativeWindow(_GLFWwindow* window,
     else
         contentRect = NSMakeRect(0, 0, wndconfig->width, wndconfig->height);
 
-    NSUInteger styleMask = NSWindowStyleMaskMiniaturizable;
-
-    if (window->monitor || !window->decorated)
-        styleMask |= NSWindowStyleMaskBorderless;
-    else
-    {
-        styleMask |= (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable);
-
-        if (window->resizable)
-            styleMask |= NSWindowStyleMaskResizable;
-    }
-
     window->ns.object = [[GLFWWindow alloc]
         initWithContentRect:contentRect
-                  styleMask:styleMask
+                  styleMask:getStyleMask(window)
                     backing:NSBackingStoreBuffered
                       defer:NO];
 
@@ -831,12 +837,6 @@ static GLFWbool createNativeWindow(_GLFWwindow* window,
             const NSWindowCollectionBehavior behavior =
                 NSWindowCollectionBehaviorFullScreenPrimary |
                 NSWindowCollectionBehaviorManaged;
-            [window->ns.object setCollectionBehavior:behavior];
-        }
-        else
-        {
-            const NSWindowCollectionBehavior behavior =
-                NSWindowCollectionBehaviorFullScreenNone;
             [window->ns.object setCollectionBehavior:behavior];
         }
 
@@ -936,9 +936,6 @@ int _glfwPlatformCreateWindow(_GLFWwindow* window,
             if (!_glfwCreateContextOSMesa(window, ctxconfig, fbconfig))
                 return GLFW_FALSE;
         }
-
-        if (!_glfwRefreshContextAttribs(window, ctxconfig))
-            return GLFW_FALSE;
     }
 
     if (window->monitor)
@@ -946,18 +943,6 @@ int _glfwPlatformCreateWindow(_GLFWwindow* window,
         _glfwPlatformShowWindow(window);
         _glfwPlatformFocusWindow(window);
         acquireMonitor(window);
-
-        if (wndconfig->centerCursor)
-            _glfwCenterCursorInContentArea(window);
-    }
-    else
-    {
-        if (wndconfig->visible)
-        {
-            _glfwPlatformShowWindow(window);
-            if (wndconfig->focused)
-                _glfwPlatformFocusWindow(window);
-        }
     }
 
     return GLFW_TRUE;
@@ -1236,10 +1221,9 @@ void _glfwPlatformSetWindowMonitor(_GLFWwindow* window,
         {
             const NSRect contentRect =
                 NSMakeRect(xpos, _glfwTransformYNS(ypos + height - 1), width, height);
-            const NSUInteger styleMask = [window->ns.object styleMask];
             const NSRect frameRect =
                 [window->ns.object frameRectForContentRect:contentRect
-                                                 styleMask:styleMask];
+                                                 styleMask:getStyleMask(window)];
 
             [window->ns.object setFrame:frameRect display:YES];
         }
@@ -1256,27 +1240,7 @@ void _glfwPlatformSetWindowMonitor(_GLFWwindow* window,
     // TODO: Solve this in a less terrible way
     _glfwPlatformPollEvents();
 
-    NSUInteger styleMask = [window->ns.object styleMask];
-
-    if (window->monitor)
-    {
-        styleMask &= ~(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable);
-        styleMask |= NSWindowStyleMaskBorderless;
-    }
-    else
-    {
-        if (window->decorated)
-        {
-            styleMask &= ~NSWindowStyleMaskBorderless;
-            styleMask |= (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable);
-        }
-
-        if (window->resizable)
-            styleMask |= NSWindowStyleMaskResizable;
-        else
-            styleMask &= ~NSWindowStyleMaskResizable;
-    }
-
+    const NSUInteger styleMask = getStyleMask(window);
     [window->ns.object setStyleMask:styleMask];
     // HACK: Changing the style mask can cause the first responder to be cleared
     [window->ns.object makeFirstResponder:window->ns.view];
@@ -1322,20 +1286,6 @@ void _glfwPlatformSetWindowMonitor(_GLFWwindow* window,
         else
             [window->ns.object setLevel:NSNormalWindowLevel];
 
-        if (window->resizable)
-        {
-            const NSWindowCollectionBehavior behavior =
-                NSWindowCollectionBehaviorFullScreenPrimary |
-                NSWindowCollectionBehaviorManaged;
-            [window->ns.object setCollectionBehavior:behavior];
-        }
-        else
-        {
-            const NSWindowCollectionBehavior behavior =
-                NSWindowCollectionBehaviorFullScreenNone;
-            [window->ns.object setCollectionBehavior:behavior];
-        }
-
         [window->ns.object setHasShadow:YES];
         // HACK: Clearing NSWindowStyleMaskTitled resets and disables the window
         //       title property but the miniwindow title property is unaffected
@@ -1369,12 +1319,7 @@ int _glfwPlatformWindowVisible(_GLFWwindow* window)
 int _glfwPlatformWindowMaximized(_GLFWwindow* window)
 {
     @autoreleasepool {
-
-    if (window->resizable)
-        return [window->ns.object isZoomed];
-    else
-        return GLFW_FALSE;
-
+    return [window->ns.object isZoomed];
     } // autoreleasepool
 }
 
@@ -1406,46 +1351,15 @@ int _glfwPlatformFramebufferTransparent(_GLFWwindow* window)
 void _glfwPlatformSetWindowResizable(_GLFWwindow* window, GLFWbool enabled)
 {
     @autoreleasepool {
-
-    const NSUInteger styleMask = [window->ns.object styleMask];
-    if (enabled)
-    {
-        [window->ns.object setStyleMask:(styleMask | NSWindowStyleMaskResizable)];
-        const NSWindowCollectionBehavior behavior =
-            NSWindowCollectionBehaviorFullScreenPrimary |
-            NSWindowCollectionBehaviorManaged;
-        [window->ns.object setCollectionBehavior:behavior];
-    }
-    else
-    {
-        [window->ns.object setStyleMask:(styleMask & ~NSWindowStyleMaskResizable)];
-        const NSWindowCollectionBehavior behavior =
-            NSWindowCollectionBehaviorFullScreenNone;
-        [window->ns.object setCollectionBehavior:behavior];
-    }
-
+    [window->ns.object setStyleMask:getStyleMask(window)];
     } // autoreleasepool
 }
 
 void _glfwPlatformSetWindowDecorated(_GLFWwindow* window, GLFWbool enabled)
 {
     @autoreleasepool {
-
-    NSUInteger styleMask = [window->ns.object styleMask];
-    if (enabled)
-    {
-        styleMask |= (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable);
-        styleMask &= ~NSWindowStyleMaskBorderless;
-    }
-    else
-    {
-        styleMask |= NSWindowStyleMaskBorderless;
-        styleMask &= ~(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable);
-    }
-
-    [window->ns.object setStyleMask:styleMask];
+    [window->ns.object setStyleMask:getStyleMask(window)];
     [window->ns.object makeFirstResponder:window->ns.view];
-
     } // autoreleasepool
 }
 
@@ -1610,11 +1524,6 @@ void _glfwPlatformSetCursorPos(_GLFWwindow* window, double x, double y)
                                               _glfwTransformYNS(globalPoint.y)));
     }
 
-    // HACK: Calling this right after setting the cursor position prevents macOS
-    //       from freezing the cursor for a fraction of a second afterwards
-    if (window->cursorMode != GLFW_CURSOR_DISABLED)
-        CGAssociateMouseAndMouseCursorPosition(true);
-
     } // autoreleasepool
 }
 
@@ -1633,7 +1542,7 @@ const char* _glfwPlatformGetScancodeName(int scancode)
     if (scancode < 0 || scancode > 0xff ||
         _glfw.ns.keycodes[scancode] == GLFW_KEY_UNKNOWN)
     {
-        _glfwInputError(GLFW_INVALID_VALUE, "Invalid scancode %i", scancode);
+        _glfwInputError(GLFW_INVALID_VALUE, "Invalid scancode");
         return NULL;
     }
 
