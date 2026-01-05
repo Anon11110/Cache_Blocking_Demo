@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(CacheBlockingDemo VERSION 1.0.0 LANGUAGES CXX)
+project(CacheBlockingDemo VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,9 +15,18 @@ elseif(UNIX AND NOT APPLE)
     add_definitions(-DVK_USE_PLATFORM_XCB_KHR)
 endif()
 
-# Find Vulkan
-find_package(Vulkan REQUIRED)
-message(STATUS "Vulkan found: ${Vulkan_INCLUDE_DIRS}")
+# Vulkan headers (no linking required - we use runtime loading via volk)
+find_path(VULKAN_HEADERS_DIR vulkan/vulkan.h
+    HINTS
+        $ENV{VULKAN_SDK}/Include
+        /usr/include
+        /usr/local/include
+)
+if(VULKAN_HEADERS_DIR)
+    message(STATUS "Vulkan headers found: ${VULKAN_HEADERS_DIR}")
+else()
+    message(STATUS "Vulkan headers not found in standard locations, will use system default")
+endif()
 
 # Find or fetch GLFW
 find_package(glfw3 3.3 QUIET)
@@ -48,6 +57,12 @@ if(NOT glm_FOUND)
     FetchContent_MakeAvailable(glm)
 endif()
 
+# Volk (Vulkan meta-loader for runtime loading)
+set(VOLK_SOURCES
+    src/third_party/volk/volk.c
+    src/third_party/volk/volk.h
+)
+
 # Core source files
 set(CORE_SOURCES
     src/core/vulkan_context.cpp
@@ -70,6 +85,7 @@ set(MOTION_BLUR_SOURCES
 # All sources
 set(SOURCES
     src/main.cpp
+    ${VOLK_SOURCES}
     ${CORE_SOURCES}
     ${EXAMPLE_BASE_SOURCES}
     ${MOTION_BLUR_SOURCES}
@@ -80,19 +96,26 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 
 # Include directories
 target_include_directories(${PROJECT_NAME} PRIVATE
-    ${Vulkan_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/volk
 )
+if(VULKAN_HEADERS_DIR)
+    target_include_directories(${PROJECT_NAME} PRIVATE ${VULKAN_HEADERS_DIR})
+endif()
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    Vulkan::Vulkan
     glfw
     glm::glm
 )
 
+# Platform-specific libraries for dynamic loading
+if(UNIX AND NOT APPLE)
+    target_link_libraries(${PROJECT_NAME} PRIVATE dl)
+endif()
+
 # Shader compilation
-find_program(GLSLC glslc HINTS $ENV{VULKAN_SDK}/Bin)
+find_program(GLSLC glslc HINTS $ENV{VULKAN_SDK}/Bin $ENV{VULKAN_SDK}/bin /usr/bin)
 if(NOT GLSLC)
     message(WARNING "glslc not found. Shaders must be compiled manually.")
 else()
@@ -144,6 +167,4 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 # Set output directories
 set_target_properties(${PROJECT_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin
 )

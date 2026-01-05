@@ -41,7 +41,16 @@ void VulkanContext::InitWindow()
 
 void VulkanContext::InitVulkan()
 {
+    if (volkInitialize() != VK_SUCCESS)
+    {
+        throw std::runtime_error("Failed to initialize Vulkan loader (volk)!");
+    }
+
     CreateInstance();
+
+    // Load instance-level Vulkan functions
+    volkLoadInstance(instance);
+
     SetupDebugMessenger();
     CreateSurface();
     PickPhysicalDevice();
@@ -96,7 +105,7 @@ void VulkanContext::Cleanup()
 
     if (enableValidationLayers)
     {
-        DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+        vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
     }
 
     vkDestroySurfaceKHR(instance, surface, nullptr);
@@ -185,7 +194,8 @@ void VulkanContext::SetupDebugMessenger()
     VkDebugUtilsMessengerCreateInfoEXT createInfo{};
     PopulateDebugMessengerCreateInfo(createInfo);
 
-    if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS)
+    // volk provides vkCreateDebugUtilsMessengerEXT directly
+    if (vkCreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugMessenger) != VK_SUCCESS)
     {
         throw std::runtime_error("Failed to set up debug messenger!");
     }
@@ -272,6 +282,8 @@ void VulkanContext::CreateLogicalDevice()
     {
         throw std::runtime_error("Failed to create logical device!");
     }
+
+    volkLoadDevice(device);
 
     vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
     vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
@@ -906,32 +918,6 @@ void VulkanContext::PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreate
                              VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
                              VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     createInfo.pfnUserCallback = DebugCallback;
-}
-
-VkResult VulkanContext::CreateDebugUtilsMessengerEXT(VkInstance inst,
-                                                     const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
-                                                     const VkAllocationCallbacks* pAllocator,
-                                                     VkDebugUtilsMessengerEXT* pDebugMessenger)
-{
-    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(inst, "vkCreateDebugUtilsMessengerEXT");
-    if (func != nullptr)
-    {
-        return func(inst, pCreateInfo, pAllocator, pDebugMessenger);
-    }
-    else
-    {
-        return VK_ERROR_EXTENSION_NOT_PRESENT;
-    }
-}
-
-void VulkanContext::DestroyDebugUtilsMessengerEXT(VkInstance inst, VkDebugUtilsMessengerEXT messenger,
-                                                  const VkAllocationCallbacks* pAllocator)
-{
-    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(inst, "vkDestroyDebugUtilsMessengerEXT");
-    if (func != nullptr)
-    {
-        func(inst, messenger, pAllocator);
-    }
 }
 
 }  // namespace vkdemo
